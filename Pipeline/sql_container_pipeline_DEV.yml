@@ -1,0 +1,131 @@
+trigger: none
+stages:
+- stage: Analyze
+  jobs:
+  - job: CheckStuff
+    pool:
+     name: Hosted VS2017
+    steps:
+    - task: AzurePowerShell@4
+      inputs:
+       azureSubscription: 'YourDevConnection'
+       ScriptType: 'InlineScript'
+       errorActionPreference: 'silentlyContinue'
+       azurePowerShellVersion: 'LatestVersion'
+
+- stage: Build
+
+  jobs:
+
+  - job: Download_Modules_And_Create_BuildArtifact
+    pool:
+      name: Hosted VS2017
+    steps:
+    - task: CopyFiles@2
+      displayName: 'Copy BA Parameterfiles to: $(build.artifactstagingdirectory)\'
+      inputs:
+        SourceFolder: ''
+        TargetFolder: '$(build.artifactstagingdirectory)'
+        CleanTargetFolder: true
+        OverWrite: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Build Artifact'
+      inputs:
+        artifactName: 'drop'
+        pathtoPublish: '$(build.artifactstagingdirectory)'
+
+- stage: Dev
+  dependsOn:
+  - Build
+  condition: 
+  jobs:
+
+  - job: Deploy_SA
+    displayName: 'Deploy prereq SA'
+    timeoutInMinutes: 0
+    condition: 
+    pool:
+      name: Hosted VS2017
+
+    steps:
+    - download: current
+      artifact: 'drop'
+
+    - task: AzurePowerShell@4
+      inputs:
+        azureSubscription: 'YourDevConnection'
+        ScriptType: 'FilePath'
+        ScriptPath: $(Pipeline.Workspace)\drop\Deploy.ps1
+        ScriptArguments: -DeploymentName StorageAccount-$(Build.BuildNumber)
+                    -TemplateFile $(Pipeline.Workspace)\drop\Resources\StorageAccounts\deploy.json
+                    -ParametersFile '$(Pipeline.Workspace)\drop\Resources\StorageAccounts\dev.parameters.json'
+                    -ResourceGroupParametersFile $(Pipeline.Workspace)\drop\Resources\ResourceGroup\dev.parameters.json
+
+        azurePowerShellVersion: LatestVersion
+        errorActionPreference: stop
+
+  - job: Deploy_KV
+    displayName: 'Deploy prereq KeyVault'
+    dependsOn: Deploy_SA
+    timeoutInMinutes: 0
+    condition: 
+    pool:
+      name: Hosted VS2017
+
+    steps:
+    - download: current
+      artifact: 'drop'
+
+    - task: AzurePowerShell@4
+      inputs:
+        azureSubscription: 'YourDevConnection'
+        ScriptType: 'FilePath'
+        ScriptPath: $(Pipeline.Workspace)\drop\Scripts\Deploy.KV.Secrets.ps1
+        ScriptArguments: -DeploymentName KeyVault-$(Build.BuildNumber)
+                    -TemplateFile $(Pipeline.Workspace)\drop\Resources\KeyVault\deploy.json
+                    -ParametersFile '$(Pipeline.Workspace)\drop\Resources\KeyVault\dev.parameters.json'
+                    -ResourceGroupParametersFile $(Pipeline.Workspace)\drop\Resources\ResourceGroup\dev.parameters.json
+
+        azurePowerShellVersion: LatestVersion
+        errorActionPreference: stop
+
+  - job: Get_KV_secret
+    displayName: 'Get secret from kV'
+    dependsOn: Deploy_KV
+    timeoutInMinutes: 0
+    condition: 
+    pool:
+      name: Hosted VS2017
+
+    steps:
+    - download: current
+      artifact: 'drop'
+
+# Azure Key Vault
+# Get Azure Key Vault secrets and store as variable
+    - task: AzureKeyVault@1
+      inputs:
+        azureSubscription: 'YourDevConnection'
+        keyVaultName: 'sqlcont-dev-kv'
+        secretsFilter: 'sql-admin'      
+
+  - job: Deploy_SQLContainer
+    displayName: 'Deploy SQLonContainer'
+    dependsOn: Deploy_KV
+    timeoutInMinutes: 0
+    condition: 
+    pool:
+      name: Hosted VS2017
+
+    steps:
+    - download: current
+      artifact: 'drop'
+
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: 'YourDevConnection'
+        ScriptType: 'ps'
+        ScriptLocation: inlineScript
+        inlineScript: |
+          az container create --image microsoft/mssql-server-linux:latest  --name <YourContainerName> --resource-group <YourdesiredResourceGroupName> --cpu 1 --memory 3.5 --port 1433 --ip-address public -e ACCEPT_EULA=Y MSSQL_SA_PASSWORD=$(sql-admin) MSSQL_PID=Web MSSQL_COLLATION=Latin1_General_CI_AS MSSQL_ENABLE_HADR=N --location westeurope --dns-name-label <SQLServerName>
