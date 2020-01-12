@@ -1,0 +1,71 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "tagValues" : {
+            "value": {
+                "Application": "SQLServerContainer",
+                "CostCenter": "xxxxx",
+                "Environment" : "DEV"
+            }            
+        }, 
+        "keyVaultName": {
+            "value": "sqlcont-dev-kv"
+        },
+        "workspaceId": {
+            "value": "/subscriptions/<subscriptionID>/resourceGroups/<CommonRGName>/providers/Microsoft.OperationalInsights/workspaces/<Your-Workspace-Name>"
+        },
+        "diagnosticStorageAccountId": {
+            "value": "/subscriptions/<subscriptionID>/resourceGroups/<YourRGName>/providers/Microsoft.Storage/storageAccounts/sqlcontsta001"
+        },
+        "lockForDeletion": {
+            "value": false
+        },
+        "enableVaultForDeployment": {
+            "value": true
+        },
+        "enableVaultForDiskEncryption": {
+            "value": true
+        },
+        "enableVaultForTemplateDeployment": {
+            "value": true
+        },
+        "diagnosticLogsRetentionInDays": {
+            "value": 365
+        },
+        "accessPolicies": {
+            "value": [
+                {
+                    "tenantId": "<tenantID>",
+                    "objectId": "<objectID>",
+                    "permissions": {
+                        "certificates": [
+                            "All"
+                        ],
+                        "keys": [
+                            "All"
+                        ],
+                        "secrets": [
+                            "All"
+                        ]
+                    }
+                },
+                 {
+                    "tenantId": "<tenantID>",
+                    "objectId": "<objectID>",
+                    "permissions": {
+                        "certificates": [
+                            "All"
+                        ],
+                        "keys": [
+                            "All"
+                        ],
+                        "secrets": [
+                            "All"
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+}
